@@ -1,0 +1,11 @@
+.env
+.env*
+env/*
+__pycache__
+
+archives
+*.log
+
+csv-concatenator
+output
+playground.py
