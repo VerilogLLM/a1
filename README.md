@@ -1,14 +1,13 @@
-A1 Post training
+Base LLM with reasoning capability for vertical LLMs
+
+Post training pipeline
+
+How to run)
+
 Total row = n * 4 (dataset list)
 
-python data/collect_math.py -l error.log -n 100 -p -m gemini | tee collect.tee.log
-python data/collect_math.py -l error.log -n 20 -p -m gemini | tee collect.tee.log
+100 rows per each dataset, parallel processing
+% python data/collect_math.py -l error.log -n 100 -p -m gemini | tee collect.tee.log
 
-python data/collect_math.py -l error.log -n 10 -p -m gemini | tee collect.tee.log
-python data/collect_math.py -l error.log -n 10 -m gemini | tee collect.tee.log
-
-python data/collect_math.py -l error.log -n 5 -p -m gemini | tee collect.tee.log
-
-python data/collect_math.py -n 1 -p -m gemini | tee collect.tee.log
-python data/collect_math.py -n 2 -p -m gemini | tee collect.tee.log
-python data/collect_math.py -n 1 -m gemini | tee collect.tee.log
+10 rows per each dataset, serial processing
+% python data/collect_math.py -l error.log -n 10 -m gemini | tee collect.tee.log
