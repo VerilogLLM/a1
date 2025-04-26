@@ -78,6 +78,7 @@ def main(train_selection, test_selection):
     parser.add_argument('-n', '--num-rows', type=int, default=100)
     parser.add_argument('-p', '--parallel', action='store_true')
     parser.add_argument('-m', '--model', type=str, default='anthropic')
+    parser.add_argument('-c', '--csv-file', type=str, help="Path to an existing CSV file")
     args = parser.parse_args()
 
     # Setup logger
@@ -85,32 +86,38 @@ def main(train_selection, test_selection):
     logger = configure_logger(args.log_file)
     start = time.time()
 
-    # Load datasets
-    train_sets = load_trainset(train_selection, shuffle=True, num_rows=args.num_rows)
-    eval_qs = load_ds_questions(test_selection)
-    print(f"Number of training datasets: {len(train_sets)}")
-    print(f"Number of evaluation questions: {len(eval_qs)}")
+    if args.csv_file:
+        # Load existing CSV
+        import pandas as pd
+        combined = pd.read_csv(args.csv_file)
+        print(f"Loaded existing CSV file: {args.csv_file}")
+    else:
+        # Load datasets
+        train_sets = load_trainset(train_selection, shuffle=True, num_rows=args.num_rows)
+        eval_qs = load_ds_questions(test_selection)
+        print(f"Number of training datasets: {len(train_sets)}")
+        print(f"Number of evaluation questions: {len(eval_qs)}")
 
-    # Deduplication
-    deduped = {}
-    for k, ds in train_sets.items():
-        res = deduplicate.deduplicate_train_from_test_ngram_ds_list(
-            ds, eval_qs, n=3, threshold=0.8, cosine=False
+        # Deduplication
+        deduped = {}
+        for k, ds in train_sets.items():
+            res = deduplicate.deduplicate_train_from_test_ngram_ds_list(
+                ds, eval_qs, n=3, threshold=0.8, cosine=False
+            )
+            if res:
+                deduped[k] = res
+        print(f"Number of deduplicated datasets: {len(deduped)}")
+
+        # Combine
+        combined = combine.combine_datasets_expand(deduped, category="math")
+        outdir = os.path.abspath("./output")
+        os.makedirs(outdir, exist_ok=True)
+        combined.to_json(
+            os.path.join(outdir, "train_ds_math.json"), orient='records', lines=True
         )
-        if res:
-            deduped[k] = res
-    print(f"Number of deduplicated datasets: {len(deduped)}")
-
-    # Combine
-    combined = combine.combine_datasets_expand(deduped, category="math")
-    outdir = os.path.abspath("./output")
-    os.makedirs(outdir, exist_ok=True)
-    combined.to_json(
-        os.path.join(outdir, "train_ds_math.json"), orient='records', lines=True
-    )
-    combined.to_csv(
-        os.path.join(outdir, "train_ds_math.csv"), index=False
-    )
+        combined.to_csv(
+            os.path.join(outdir, "train_ds_math.csv"), index=False
+        )
 
     # Process with engine
     model_type = args.model
