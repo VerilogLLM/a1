@@ -78,7 +78,8 @@ def main(train_selection, test_selection):
     parser.add_argument('-n', '--num-rows', type=int, default=100)
     parser.add_argument('-p', '--parallel', action='store_true')
     parser.add_argument('-m', '--model', type=str, default='anthropic')
-    parser.add_argument('-c', '--csv-file', type=str, help="Path to an existing CSV file")
+    parser.add_argument('-mode', '--mode', type=int, default=0)
+    parser.add_argument('-csv', '--csv-file', type=str, help="Path to an existing CSV file")
     args = parser.parse_args()
 
     # Setup logger
@@ -86,11 +87,21 @@ def main(train_selection, test_selection):
     logger = configure_logger(args.log_file)
     start = time.time()
 
+    if args.mode == 2:
+        if not args.csv_file:
+            print("Error: --csv-file argument is required when mode is 2.")
+            exit(1)
     if args.csv_file:
         # Load existing CSV
         import pandas as pd
-        combined = pd.read_csv(args.csv_file)
+        from datasets import Dataset
+        pd_csv = pd.read_csv(args.csv_file)
         print(f"Loaded existing CSV file: {args.csv_file}")
+        combined = Dataset.from_pandas(pd_csv)
+        if args.mode == 2:
+            # Drop unnecessary columns
+            columns_to_keep = ['question', 'solution', 'solution_candidate', 'candidate_reasoning_plan', 'critique']
+            combined = combined.remove_columns([col for col in combined.column_names if col not in columns_to_keep])
     else:
         # Load datasets
         train_sets = load_trainset(train_selection, shuffle=True, num_rows=args.num_rows)
@@ -110,14 +121,15 @@ def main(train_selection, test_selection):
 
         # Combine
         combined = combine.combine_datasets_expand(deduped, category="math")
-        outdir = os.path.abspath("./output")
-        os.makedirs(outdir, exist_ok=True)
-        combined.to_json(
-            os.path.join(outdir, "train_ds_math.json"), orient='records', lines=True
-        )
-        combined.to_csv(
-            os.path.join(outdir, "train_ds_math.csv"), index=False
-        )
+
+    outdir = os.path.abspath("./output")
+    os.makedirs(outdir, exist_ok=True)
+    combined.to_json(
+        os.path.join(outdir, "train_ds_math.json"), orient='records', lines=True
+    )
+    combined.to_csv(
+        os.path.join(outdir, "train_ds_math.csv"), index=False
+    )
 
     # Process with engine
     model_type = args.model
@@ -136,11 +148,11 @@ def main(train_selection, test_selection):
 
     if args.parallel:
         updated_ds, tokens = engine.process_api_reasoning_parallel(
-            combined, api_keys, verif_keys, model_type, outdir
+            combined, api_keys, verif_keys, model_type, outdir, args.mode
         )
     else:
         updated_ds, tokens = engine.process_api_reasoning(
-            combined, model_type, outdir
+            combined, model_type, outdir, args.mode
         )
 
     # Print summary

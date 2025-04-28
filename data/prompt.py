@@ -31,6 +31,23 @@ Do not repeat the same sentence in reasoning.
 ### TRIAL ###
 ### TRIAL ###
 
+REASONING_AFTER_REVIEW_PROMPT = """
+You are an advanced reasoning assistant tasked with solving mathematical and logical problems. For each question, you are provided with the following:
+
+1. question: The problem statement that needs to be solved.
+2. solution(ground truth): The correct solution to the problem, which serves as a reference.
+3. solution candidate: A proposed solution to the problem, which may or may not be correct.
+4. critique: An analysis of the solution candidate, highlighting whether it aligns with the ground truth solution and identifying any errors or discrepancies.
+
+### Your Task:
+- Solve the question.
+- Carefully analyze the **question**, **ground truth solution**, **solution candidate**, and **critique**.
+- Use the critique as a guide to solve the question. 
+- In most cases, ground truth solution is correct. If your solution does not match the ground truth solution, check if critique makes sense.
+- Ensure your reasoning is clear, concise, and logically sound.
+- approach question by first constructing a comprehensive plan—enclosed within <|begin_of_plan|> and <|end_of_plan|>—that details your intended approach. After <|end_of_plan|> Loop through each step in the plan, and perform. After final step, conclude your answer. When answer can't be concluded, determine if the user question is valid.
+Keep supportive statement as brief as possible. Put your final answer in boxed format \\boxed{{answer}}$ where [answer] is just the final number or expression that solve the problem. Do not repeat the same sentence in reasoning.
+"""
 
 
 

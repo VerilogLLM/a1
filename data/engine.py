@@ -36,7 +36,7 @@ def call_llm(model_type, api_key, system_prompt, question):
             api_key = os.getenv("GEMINI_API_KEY")
         # model="gemini-2.5-pro-preview-03-25",
         return llm.llm_gemini("gemini-2.0-flash", system_prompt, question, api_key)
-    elif model_type.lower() == "o3-mini":
+    elif model_type.lower() == "o4-mini":
         if api_key is None:
             api_key = os.getenv("OPENAI_API_KEY")
         # return llm.llm_openai("o3-mini", system_prompt, question, api_key)
@@ -74,7 +74,7 @@ def token_counter(llm, token_data):
         total_tokens_api = 0
     return input_tokens_api, output_tokens_api, total_tokens_api
 
-def process_row(row, output_dir, api_key, api_key_verif, model_type):
+def process_row(row, output_dir, api_key, api_key_verif, model_type, mode=0):
     """Process a single row from the dataset and return token usage info."""
     index = row.get('index', 0)
     question = row.get('question')
@@ -97,7 +97,18 @@ def process_row(row, output_dir, api_key, api_key_verif, model_type):
     print(f"\nProcessing row {index}: Question: {question}")
     try:
         # Call the selected LLM API based on model_type
-        response, token_data = call_llm(model_type, api_key, prompt.REASONING_STRUCTURE_PROMPT, question)
+        if mode == 2:
+            rerun_prompt = (
+                f"Question: {row['question']}\n"
+                f"Solution Ground Truth: {row['solution']}\n"
+                f"Solution Candidate: {row.get('solution_candidate')}\n"
+                f"Candidate Reasoning Plan: {row.get('candidate_reasoning_plan')}\n"
+                f"Critique: {row.get('critique')}\n"
+            )
+            response, token_data = call_llm(model_type, api_key, prompt.REASONING_AFTER_REVIEW_PROMPT, rerun_prompt)
+        else:
+            response, token_data = call_llm(model_type, api_key, prompt.REASONING_STRUCTURE_PROMPT, question)
+
     except Exception as e:
         logger.error(f"LLM call failed for row {index}: {row}. Error: {e}")
         return None
@@ -138,6 +149,18 @@ def process_row(row, output_dir, api_key, api_key_verif, model_type):
     
     # Update row with reasoning components
     updated_row = {**row, **components_dict}
+    if mode == 1:
+        pass
+    else:
+        try:
+            # Save individual result to prevent data loss
+            row_df = pd.DataFrame([updated_row])
+            row_filename = os.path.join(output_dir, f"processed_row_{index}.csv")
+            row_df.to_csv(row_filename, index=False)
+        except Exception as e:
+            print(f"Failed to save row {index}: {e}")
+
+        return updated_row, local_tokens
     
     # Call verification if needed
     response_verif = None
@@ -151,7 +174,7 @@ def process_row(row, output_dir, api_key, api_key_verif, model_type):
             f"Reasoning trace: {components_dict['reasoning_trace']}\n"
         )
         try:
-            response_verif, token_data_verif = call_llm("o3-mini", api_key_verif, prompt.REASONING_VERIFIER_PROMPT, verif_prompt)
+            response_verif, token_data_verif = call_llm("o4-mini", api_key_verif, prompt.REASONING_VERIFIER_PROMPT, verif_prompt)
         except Exception as e:
             logger.error(f"Verifier call failed for row {index}: {e}")
         print("Verifier Response:\n", response_verif)
@@ -206,7 +229,7 @@ def process_row(row, output_dir, api_key, api_key_verif, model_type):
     
     return updated_row, local_tokens
 
-def process_api_reasoning_parallel(dataset, api_keys, api_keys_verif, model_type, output_dir):
+def process_api_reasoning_parallel(dataset, api_keys, api_keys_verif, model_type, output_dir, mode=0):
     """
     Process the dataset in parallel, calling LLM APIs for reasoning and verification.
     Returns the updated dataset and aggregated token usage.
@@ -237,7 +260,8 @@ def process_api_reasoning_parallel(dataset, api_keys, api_keys_verif, model_type
     if model_type == "gemini":
         num_workers = 50 # Tier1 rate. RPM 2,000, TPM 4M.  
     else: 
-        num_workers = len(api_keys)  # Use the number of API keys as the max workers
+        num_workers = 10
+        # num_workers = len(api_keys)  # Use the number of API keys as the max workers
     
     results = []
     temp_dirs = []  # Keep track of all temporary directories created
@@ -266,7 +290,7 @@ def process_api_reasoning_parallel(dataset, api_keys, api_keys_verif, model_type
             # Select an API key in a round-robin manner
             key = api_keys[i % len(api_keys)]
             key_verif = api_keys_verif[i % len(api_keys_verif)]
-            futures.append(executor.submit(process_row, row, temp_dir, key, key_verif, model_type))
+            futures.append(executor.submit(process_row, row, temp_dir, key, key_verif, model_type, mode))
         
         # Collect results and aggregate token counts
         for future in futures:
@@ -294,7 +318,7 @@ def process_api_reasoning_parallel(dataset, api_keys, api_keys_verif, model_type
     
     return updated_dataset, aggregated_tokens
 
-def process_api_reasoning(dataset, model_type, output_dir):
+def process_api_reasoning(dataset, model_type, output_dir, mode=0):
     """
     Iterates over the combined dataset, generates reasoning via an LLM call,
     extracts components from the response, and if available, verifies the reasoning.
@@ -335,7 +359,17 @@ def process_api_reasoning(dataset, model_type, output_dir):
             try:
                 # For non-parallel mode, put api_key to None, to choose the default one
                 api_key = None
-                response, token_data = call_llm(model_type, api_key, prompt.REASONING_STRUCTURE_PROMPT, question)
+                if mode == 2:
+                    rerun_prompt = (
+                        f"Question: {row['question']}\n"
+                        f"Solution Ground Truth: {row['solution']}\n"
+                        f"Solution Candidate: {row.get('solution_candidate')}\n"
+                        f"Candidate Reasoning Plan: {row.get('candidate_reasoning_plan')}\n"
+                        f"Critique: {row.get('critique')}\n"
+                    )
+                    response, token_data = call_llm(model_type, api_key, prompt.REASONING_AFTER_REVIEW_PROMPT, rerun_prompt)
+                else:
+                    response, token_data = call_llm(model_type, api_key, prompt.REASONING_STRUCTURE_PROMPT, question)
             except Exception as e:
                 logger.error(f"LLM call failed for row {index}: {row}. Error: {e}")
                 continue  # Skip to the next row if the call fails
@@ -364,6 +398,14 @@ def process_api_reasoning(dataset, model_type, output_dir):
                                   with_indices=True)
             print("Updated dataset with reasoning components for row", index)
 
+            if mode == 1:
+                pass
+            else:
+                # Incremental saving after any updates
+                dataset.to_json(output_json_file_api, orient='records', lines=True)
+                dataset.to_csv(output_csv_file_api, index=False)
+                continue
+
             # If verification is needed
             if components_dict.get("reasoning_plan") and components_dict.get("reasoning_trace"):
                 api_key_verif = os.getenv("OPENAI_API_KEY")
@@ -373,7 +415,7 @@ def process_api_reasoning(dataset, model_type, output_dir):
                     f"Reasoning trace: {components_dict['reasoning_trace']}\n"
                 )
 
-                response_verif, token_data_verif = call_llm("o3-mini", api_key_verif, prompt.REASONING_VERIFIER_PROMPT, verif_prompt)
+                response_verif, token_data_verif = call_llm("o4-mini", api_key_verif, prompt.REASONING_VERIFIER_PROMPT, verif_prompt)
                 print("Verifier Response:\n", response_verif)
                 fixed_components = extract_verification_components(response_verif)
                 print("Extracted Verification Components:", fixed_components)
