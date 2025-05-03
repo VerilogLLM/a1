@@ -3,7 +3,7 @@ import tiktoken
 import time
 
 from openai import OpenAI
-TEMPERATURE = 0.8
+TEMPERATURE = 1
 
 def count_tokens(text, model):
     # Get the encoding for the specified model
@@ -61,7 +61,7 @@ def llm_openai(model, system_prompt, user_prompt):
             messages=messages,
             store=True,
             max_tokens=8192,  # Adjust as needed
-            temperature=0.3
+            temperature=0.8
         )
         # Get token counts
         prompt_tokens = response.usage.prompt_tokens

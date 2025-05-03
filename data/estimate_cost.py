@@ -3,6 +3,7 @@ pricing = [
         {'provider': 'openai', 'model': 'gpt-4o', 'cost_per_million_input': 2.50, 'cost_per_million_output': 10.00},
         {'provider': 'openai', 'model': 'gpt-4o-mini', 'cost_per_million_input': 0.15, 'cost_per_million_output': 0.60},
         {'provider': 'openai', 'model': 'o1', 'cost_per_million_input': 15.00, 'cost_per_million_output': 60.00},
+        {'provider': 'openai', 'model': 'o4-mini', 'cost_per_million_input': 1.10, 'cost_per_million_output': 4.40},
         {'provider': 'openai', 'model': 'o3-mini', 'cost_per_million_input': 1.10, 'cost_per_million_output': 4.40},
         {'provider': 'openai', 'model': 'o1-mini', 'cost_per_million_input': 3.00, 'cost_per_million_output': 15.00},
         {'provider': 'anthropic', 'model': 'claude-3.7-sonnet', 'cost_per_million_input': 3.00, 'cost_per_million_output': 15.00},

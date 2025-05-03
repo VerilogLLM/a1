@@ -39,7 +39,6 @@ def call_llm(model_type, api_key, system_prompt, question):
     elif model_type.lower() == "o4-mini":
         if api_key is None:
             api_key = os.getenv("OPENAI_API_KEY")
-        # return llm.llm_openai("o3-mini", system_prompt, question, api_key)
         return llm.llm_openai("o4-mini", system_prompt, question, api_key)
     elif model_type.lower() == "qwq":
         # Use vllm API with "grok qwq"
@@ -64,7 +63,7 @@ def token_counter(llm, token_data):
         input_tokens_api = token_data.input_tokens
         output_tokens_api = token_data.output_tokens
         total_tokens_api = token_data.input_tokens + token_data.output_tokens
-    elif llm == "o3-mini":
+    elif llm in ["o3-mini", "o4-mini"]:
         input_tokens_api = token_data["prompt_tokens"]
         output_tokens_api = token_data["completion_tokens"]
         total_tokens_api = token_data["total_tokens"]
@@ -497,7 +496,7 @@ def print_token_summary(tokens, model_type="anthropic"):
     print("Total output tokens verif:", tokens["output_tokens_api_verif"])
     print("Total tokens verif:", tokens["total_tokens_api_verif"])
     print("Verification cost:", estimate_cost.api_cost_estimation_service(
-        tokens["input_tokens_api_verif"], tokens["output_tokens_api_verif"], "o3-mini"))
+        tokens["input_tokens_api_verif"], tokens["output_tokens_api_verif"], "o4-mini"))
     
     print("\nTotal input tokens reph:", tokens["input_tokens_api_reph"])
     print("Total output tokens reph:", tokens["output_tokens_api_reph"])

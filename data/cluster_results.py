@@ -8,7 +8,7 @@ import os
 def extract_answer(text):
     """
     Extracts the final numeric answer from a solution string.
-    First, it looks for a LaTeX boxed answer (e.g., \boxed{31}).
+    First, it looks for a LaTeX boxed answer (e.g., \\boxed{31}).
     If not found, it returns the last integer found in the text.
     """
     if text is None or text == "nan":
@@ -61,7 +61,7 @@ def prompt(ground_truth, reasoning_text):
     SOLUTION: {reasoning_text}
     GROUND TRUTH SOLUTION: {ground_truth}
 
-    If they reach the same conclusion, correctness judge 'yes'.
+    If they reach the same conclusion, print match in \\boxed{{match}}.
     """
 
 def compare_solutions_llm(solution_text, reasoning_text):
@@ -75,7 +75,8 @@ def compare_solutions_llm(solution_text, reasoning_text):
 
     response = llm.llm_ollama("gemma3:12b", system_prompt, user_prompt)
     print("LLM response:\n", response)
-    match = 'yes' in response.lower()
+    # match = 'yes' in response.lower()
+    match = '{match}' in response.lower()
     return match, response.strip()
 
 def compare_solutions(solution_text, reasoning_text, equality_check=False):

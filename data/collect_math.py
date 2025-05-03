@@ -97,11 +97,20 @@ def main(train_selection, test_selection):
         from datasets import Dataset
         pd_csv = pd.read_csv(args.csv_file)
         print(f"Loaded existing CSV file: {args.csv_file}")
-        combined = Dataset.from_pandas(pd_csv)
-        if args.mode == 2:
+        ds_csv = Dataset.from_pandas(pd_csv)
+        if args.mode == 1:
+            # Erase values of all columns except for 'question' and 'solution'
+            columns_to_erase = [col for col in ds_csv.column_names if col not in ['question', 'solution']]
+            for col in columns_to_erase:
+                ds_csv_init = ds_csv.map(lambda x: {col: (x[col] if col in ['question', 'solution'] else None) for col in ds_csv.column_names})
+            combined = ds_csv_init
+        elif args.mode == 2:
             # Drop unnecessary columns
-            columns_to_keep = ['question', 'solution', 'solution_candidate', 'candidate_reasoning_plan', 'critique']
-            combined = combined.remove_columns([col for col in combined.column_names if col not in columns_to_keep])
+            columns_to_keep = ['question', 'solution', 'solution_candidate', 'candidate_reasoning_plan', 'data_source','category','critique']
+            combined = ds_csv.remove_columns([col for col in ds_csv.column_names if col not in columns_to_keep])
+        else:
+            pass
+        
     else:
         # Load datasets
         train_sets = load_trainset(train_selection, shuffle=True, num_rows=args.num_rows)
@@ -141,10 +150,28 @@ def main(train_selection, test_selection):
         os.getenv("GEMINI_API_KEY"), os.getenv("GEMINI_API_KEY1"),
         os.getenv("GEMINI_API_KEY2")
     ]
+    openai_keys = [
+        os.getenv("OPENAI_API_KEY"), os.getenv("OPENAI_API_KEY1")
+    ]
+    grok_keys = [
+        os.getenv("GROK_API_KEY")
+    ]
     verif_keys = [
         os.getenv("OPENAI_API_KEY_VERIF"), os.getenv("OPENAI_API_KEY_VERIF1")
     ]
-    api_keys = gemini_keys if model_type.lower() == 'gemini' else anthropic_keys
+    if model_type.lower() == 'anthropic':
+        api_keys = anthropic_keys
+    elif model_type.lower() == 'openai':
+        api_keys = openai_keys
+    elif model_type.lower() == 'gemini':
+        api_keys = gemini_keys
+    elif model_type.lower() == 'grok':
+        api_keys = grok_keys
+    else:
+        print(f"Unsupported model type: {model_type}")
+        exit(1)
+
+
 
     if args.parallel:
         updated_ds, tokens = engine.process_api_reasoning_parallel(
