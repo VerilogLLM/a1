@@ -36,16 +36,29 @@ def call_llm(model_type, api_key, system_prompt, question):
             api_key = os.getenv("GEMINI_API_KEY")
         # model="gemini-2.5-pro-preview-03-25",
         return llm.llm_gemini("gemini-2.0-flash", system_prompt, question, api_key)
-    elif model_type.lower() == "o4-mini":
+    elif model_type.lower() in ["o4-mini", "o3-mini", "gpt-4.1"]:
         if api_key is None:
             api_key = os.getenv("OPENAI_API_KEY")
-        return llm.llm_openai("o4-mini", system_prompt, question, api_key)
+        if model_type.lower() == "o3-mini":
+            return llm.llm_openai("o3-mini", system_prompt, question, api_key)
+        elif model_type.lower() == "gpt-4.1":
+            return llm.llm_openai("gpt-4.1", system_prompt, question, api_key)
+        else:
+            return llm.llm_openai("o4-mini", system_prompt, question, api_key)
     elif model_type.lower() == "qwq":
         # Use vllm API with "grok qwq"
         if api_key is None:
             api_key = os.getenv("GROQ_API_KEY")
         response = llm.llm_vllm("grok-qwq", system_prompt, question)
         # Create a dummy token_data object with zero counts
+        DummyTokenData = type("DummyTokenData", (), {}) 
+        dummy = DummyTokenData()
+        dummy.input_tokens = 0
+        dummy.output_tokens = 0
+        return response, dummy
+    elif model_type.lower() == "gemma3":
+        #ollama
+        response = llm.llm_ollama("gemma3:12b", system_prompt, question)
         DummyTokenData = type("DummyTokenData", (), {}) 
         dummy = DummyTokenData()
         dummy.input_tokens = 0

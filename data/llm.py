@@ -61,7 +61,7 @@ def llm_openai(model, system_prompt, user_prompt):
             messages=messages,
             store=True,
             max_tokens=8192,  # Adjust as needed
-            temperature=0.8
+            temperature=TEMPERATURE
         )
         # Get token counts
         prompt_tokens = response.usage.prompt_tokens
