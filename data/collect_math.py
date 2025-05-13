@@ -161,12 +161,16 @@ def main(train_selection, test_selection):
     ]
     if model_type.lower() == 'anthropic':
         api_keys = anthropic_keys
-    elif model_type.lower() == 'openai':
+    elif model_type.lower() in ['openai', 'o4-mini', 'o3-mini', 'gpt-4.1']:
         api_keys = openai_keys
     elif model_type.lower() == 'gemini':
         api_keys = gemini_keys
     elif model_type.lower() == 'grok':
         api_keys = grok_keys
+    elif model_type.lower() == 'gemma3':
+        #no api keys needed
+        api_keys = []
+        pass
     else:
         print(f"Unsupported model type: {model_type}")
         exit(1)

@@ -78,6 +78,32 @@ def csv_to_json(csv_file_path, json_file_path, delimiter=','):
 
     print(f"Successfully converted {csv_file_path} to {json_file_path}")
 
+def json_to_csv(json_file_path, csv_file_path):
+    """
+    Convert a newline-delimited JSON file to a CSV file.
+
+    Args:
+        json_file_path (str): Path to the input JSON file.
+        csv_file_path (str): Path to the output CSV file.
+    """
+    # Open and read the JSON file
+    with open(json_file_path, mode='r', encoding='utf-8') as json_file:
+        # Read each line as a separate JSON object
+        data = [json.loads(line) for line in json_file]
+
+    # Open the CSV file for writing
+    with open(csv_file_path, mode='w', encoding='utf-8', newline='') as csv_file:
+        # Create a CSV writer object
+        csv_writer = csv.DictWriter(csv_file, fieldnames=data[0].keys())
+        
+        # Write the header row
+        csv_writer.writeheader()
+        
+        # Write each row of data
+        csv_writer.writerows(data)
+
+    print(f"Successfully converted {json_file_path} to {csv_file_path}")
+
 def main():
     parser = argparse.ArgumentParser(description="Utility script for CSV operations.")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -91,6 +117,7 @@ def main():
 
     # Subparser for converting CSV to JSON
     to_json_parser = subparsers.add_parser("to_json", help="Convert a CSV file to JSON")
+    to_csv_parser = subparsers.add_parser("to_csv", help="Convert a JSON file to csv")
 
     args = parser.parse_args()
 
@@ -116,6 +143,12 @@ def main():
         csv_file = os.path.join(base_dir, 'output/train_ds_math.csv')
         json_file = os.path.join(base_dir, 'output/train_ds_math.json')
         csv_to_json(csv_file, json_file)
+    elif args.command == "to_csv":
+        # json_file = os.path.join(base_dir, 'output/train_ds_math.json')
+        # csv_file = os.path.join(base_dir, 'output/train_ds_math.csv')
+        json_file = os.path.join(base_dir, 'output/solution_non_matching_rows.json')
+        csv_file = os.path.join(base_dir, 'output/solution_non_matching_rows.csv')
+        json_to_csv(json_file, csv_file)
     else:
         parser.print_help()
 

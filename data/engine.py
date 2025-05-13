@@ -86,6 +86,29 @@ def token_counter(llm, token_data):
         total_tokens_api = 0
     return input_tokens_api, output_tokens_api, total_tokens_api
 
+def determine_token_counts(model_type, token_data):
+    """
+    Determine token counts based on the model type and token data.
+    """
+    if model_type.lower() == "gemini":
+        input_token_count = token_data.prompt_token_count
+        output_token_count = token_data.candidates_token_count
+        total_token_count = token_data.total_token_count
+    elif model_type.lower() in ["openai", "o4-mini", "o3-mini", "gpt-4.1"]:
+        input_token_count = token_data["prompt_tokens"]
+        output_token_count = token_data["completion_tokens"]
+        total_token_count = token_data["total_tokens"]
+    elif model_type.lower() in ["anthropic", "sonnet-3.7"]:  # Assume anthropic/sonnet-3.7 (or others with similar structure)
+        input_token_count = token_data.input_tokens
+        output_token_count = token_data.output_tokens
+        total_token_count = token_data.input_tokens + token_data.output_tokens
+    else:
+        # Default to zero if model type is unknown
+        input_token_count = 0
+        output_token_count = 0
+        total_token_count = 0
+    return input_token_count, output_token_count, total_token_count
+
 def process_row(row, output_dir, api_key, api_key_verif, model_type, mode=0):
     """Process a single row from the dataset and return token usage info."""
     index = row.get('index', 0)
@@ -117,6 +140,7 @@ def process_row(row, output_dir, api_key, api_key_verif, model_type, mode=0):
                 f"Candidate Reasoning Plan: {row.get('candidate_reasoning_plan')}\n"
                 f"Critique: {row.get('critique')}\n"
             )
+            print("Rerun Prompt:\n", rerun_prompt)
             response, token_data = call_llm(model_type, api_key, prompt.REASONING_AFTER_REVIEW_PROMPT, rerun_prompt)
         else:
             response, token_data = call_llm(model_type, api_key, prompt.REASONING_STRUCTURE_PROMPT, question)
@@ -133,14 +157,7 @@ def process_row(row, output_dir, api_key, api_key_verif, model_type, mode=0):
     print("Token Data:", token_data)
 
     # Determine token counts based on model type
-    if model_type.lower() == "gemini":
-        input_token_count = token_data.prompt_token_count
-        output_token_count = token_data.candidates_token_count
-        total_token_count = token_data.total_token_count
-    else:  # Assume anthropic/sonnet-3.7 (or others with similar structure)
-        input_token_count = token_data.input_tokens
-        output_token_count = token_data.output_tokens
-        total_token_count = token_data.input_tokens + token_data.output_tokens
+    input_token_count, output_token_count, total_token_count = determine_token_counts(model_type, token_data)
 
     # Set up local token counts for aggregation
     local_tokens = {
@@ -195,6 +212,7 @@ def process_row(row, output_dir, api_key, api_key_verif, model_type, mode=0):
             fixed_dict = fixed_components.to_dict() if hasattr(fixed_components, "to_dict") else fixed_components
             updated_row = {**updated_row, **fixed_dict}
             print("Updated row with verification components for row", index)
+            # Verifier is hard fixed to openai
             local_tokens["input_tokens_api_verif"] = token_data_verif.get("prompt_tokens", 0)
             local_tokens["output_tokens_api_verif"] = token_data_verif.get("completion_tokens", 0)
             local_tokens["total_tokens_api_verif"] = token_data_verif.get("total_tokens", 0)
@@ -300,8 +318,14 @@ def process_api_reasoning_parallel(dataset, api_keys, api_keys_verif, model_type
             print(f"Temporary directory created for row {i}: {temp_dir}")
 
             # Select an API key in a round-robin manner
-            key = api_keys[i % len(api_keys)]
-            key_verif = api_keys_verif[i % len(api_keys_verif)]
+            if len(api_keys) == 0:
+                key = None 
+            else:
+                key = api_keys[i % len(api_keys)]
+            if len(api_keys_verif) == 0:
+                key_verif = None
+            else:
+                key_verif = api_keys_verif[i % len(api_keys_verif)]
             futures.append(executor.submit(process_row, row, temp_dir, key, key_verif, model_type, mode))
         
         # Collect results and aggregate token counts
@@ -390,14 +414,10 @@ def process_api_reasoning(dataset, model_type, output_dir, mode=0):
             print("Token Data:", token_data)
 
             # Determine token counts based on model type
-            if model_type.lower() == "gemini":
-                aggregated_tokens["input_tokens_api"] += token_data.prompt_token_count
-                aggregated_tokens["output_tokens_api"] += token_data.candidates_token_count
-                aggregated_tokens["total_tokens_api"] += token_data.total_token_count
-            else:  # Assume anthropic/sonnet-3.7 (or others with similar structure)
-                aggregated_tokens["input_tokens_api"] += token_data.input_tokens
-                aggregated_tokens["output_tokens_api"] += token_data.output_tokens
-                aggregated_tokens["total_tokens_api"] += token_data.input_tokens + token_data.output_tokens
+            input_token_count, output_token_count, total_token_count = determine_token_counts(model_type, token_data)
+            aggregated_tokens["input_tokens_api"] += input_token_count
+            aggregated_tokens["output_tokens_api"] += output_token_count
+            aggregated_tokens["total_tokens_api"] += total_token_count
 
             # Extract reasoning components
             reasoning_components = extract_reasoning_components(response)
@@ -439,9 +459,10 @@ def process_api_reasoning(dataset, model_type, output_dir, mode=0):
                                       with_indices=True)
                 print("Updated dataset with verification components for row", index)
 
-                aggregated_tokens["input_tokens_api_verif"] += token_data_verif["prompt_tokens"]
-                aggregated_tokens["output_tokens_api_verif"] += token_data_verif["completion_tokens"]
-                aggregated_tokens["total_tokens_api_verif"] += token_data_verif["total_tokens"]
+                input_token_count, output_token_count, total_token_count = determine_token_counts("o4-mini", token_data_verif)
+                aggregated_tokens["input_tokens_api_verif"] += input_token_count
+                aggregated_tokens["output_tokens_api_verif"] += output_token_count
+                aggregated_tokens["total_tokens_api_verif"] += total_token_count
 
                 # If reasoning and solution are different, rerun with solution hints.
                 comparison_result = None
@@ -470,10 +491,10 @@ def process_api_reasoning(dataset, model_type, output_dir, mode=0):
                                         {**example, **fixed_dict} if idx == index else example, 
                                         with_indices=True)
                     print("Updated dataset with rephrase components for row", index)
-                    token_in, token_out, token_total = token_counter("gemini-2.0-flash", token_data_reph)
-                    aggregated_tokens["input_tokens_api_reph"] += token_in
-                    aggregated_tokens["output_tokens_api_reph"] += token_out
-                    aggregated_tokens["total_tokens_api_reph"] += token_total
+                    input_token_count, output_token_count, total_token_count = determine_token_counts(model_type, token_data_reph)
+                    aggregated_tokens["input_tokens_api_reph"] += input_token_count
+                    aggregated_tokens["output_tokens_api_reph"] += output_token_count
+                    aggregated_tokens["total_tokens_api_reph"] += total_token_count
 
             # Incremental saving after any updates
             dataset.to_json(output_json_file_api, orient='records', lines=True)
