@@ -78,6 +78,7 @@ def main(train_selection, test_selection):
     parser.add_argument('-n', '--num-rows', type=int, default=100)
     parser.add_argument('-p', '--parallel', action='store_true')
     parser.add_argument('-m', '--model', type=str, default='anthropic')
+    parser.add_argument('-mv', '--model_verifier', type=str, default='anthropic')
     parser.add_argument('-mode', '--mode', type=int, default=0)
     parser.add_argument('-csv', '--csv-file', type=str, help="Path to an existing CSV file")
     args = parser.parse_args()
@@ -142,6 +143,7 @@ def main(train_selection, test_selection):
 
     # Process with engine
     model_type = args.model
+    model_verif_type = args.model_verifier
     anthropic_keys = [
         os.getenv("ANTHROPIC_API_KEY"), os.getenv("ANTHROPIC_API_KEY1"),
         os.getenv("ANTHROPIC_API_KEY2")
@@ -156,38 +158,49 @@ def main(train_selection, test_selection):
     grok_keys = [
         os.getenv("GROK_API_KEY")
     ]
+    # verif_keys = [
+        # os.getenv("OPENAI_API_KEY_VERIF"), os.getenv("OPENAI_API_KEY_VERIF1")
+    # ]
     verif_keys = [
-        os.getenv("OPENAI_API_KEY_VERIF"), os.getenv("OPENAI_API_KEY_VERIF1")
+        os.getenv("ANTHROPIC_API_KEY"), os.getenv("ANTHROPIC_API_KEY1")
     ]
-    if model_type.lower() == 'anthropic':
-        api_keys = anthropic_keys
-    elif model_type.lower() in ['openai', 'o4-mini', 'o3-mini', 'gpt-4.1']:
-        api_keys = openai_keys
-    elif model_type.lower() == 'gemini':
-        api_keys = gemini_keys
-    elif model_type.lower() == 'grok':
-        api_keys = grok_keys
-    elif model_type.lower() == 'gemma3':
-        #no api keys needed
-        api_keys = []
-        pass
-    else:
-        print(f"Unsupported model type: {model_type}")
+    
+    # Helper function to select API keys based on model type
+    def select_api_keys(model_name):
+        if model_name.lower() == 'anthropic':
+            return anthropic_keys
+        elif model_name.lower() in ['openai', 'o4-mini', 'o3-mini', 'gpt-4.1']:
+            return openai_keys
+        elif model_name.lower() == 'gemini':
+            return gemini_keys
+        elif model_name.lower() == 'grok':
+            return grok_keys
+        elif model_name.lower() == 'gemma3':
+            return []  # no api keys needed
+        else:
+            print(f"Unsupported model type: {model_name}")
+            return []
+    
+    # Select keys for main model
+    api_keys = select_api_keys(model_type)
+    # Select keys for verification model
+    verif_keys = select_api_keys(model_verif_type)
+    
+    if not api_keys and model_type.lower() != 'gemma3':
+        print(f"No valid API keys found for model type: {model_type}")
         exit(1)
-
-
-
+    
     if args.parallel:
         updated_ds, tokens = engine.process_api_reasoning_parallel(
-            combined, api_keys, verif_keys, model_type, outdir, args.mode
+            combined, api_keys, verif_keys, model_type, model_verif_type, outdir, args.mode
         )
     else:
         updated_ds, tokens = engine.process_api_reasoning(
-            combined, model_type, outdir, args.mode
+            combined, model_type, model_verif_type, outdir, args.mode
         )
 
     # Print summary
-    engine.print_token_summary(tokens, model_type)
+    engine.print_token_summary(tokens, model_type, model_verif_type)
 
     elapsed = time.time() - start
     print(f"Pipeline completed in {elapsed:.2f}s")

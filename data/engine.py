@@ -68,7 +68,7 @@ def call_llm(model_type, api_key, system_prompt, question):
         raise ValueError("Unknown model type: " + model_type)
 
 def token_counter(llm, token_data):
-    if llm == "gemini-2.0-flash":
+    if llm in ["gemini-2.0-flash", "gemini-2.5-pro-preview-03-25"]:
         input_tokens_api = token_data.prompt_token_count
         output_tokens_api = token_data.candidates_token_count
         total_tokens_api = token_data.total_token_count
@@ -76,7 +76,7 @@ def token_counter(llm, token_data):
         input_tokens_api = token_data.input_tokens
         output_tokens_api = token_data.output_tokens
         total_tokens_api = token_data.input_tokens + token_data.output_tokens
-    elif llm in ["o3-mini", "o4-mini"]:
+    elif llm in ["o3-mini", "o4-mini", "gpt-4.1"]:
         input_tokens_api = token_data["prompt_tokens"]
         output_tokens_api = token_data["completion_tokens"]
         total_tokens_api = token_data["total_tokens"]
@@ -109,7 +109,7 @@ def determine_token_counts(model_type, token_data):
         total_token_count = 0
     return input_token_count, output_token_count, total_token_count
 
-def process_row(row, output_dir, api_key, api_key_verif, model_type, mode=0):
+def process_row(row, output_dir, api_key, api_key_verif, model_type, model_verif_type, mode=0):
     """Process a single row from the dataset and return token usage info."""
     index = row.get('index', 0)
     question = row.get('question')
@@ -203,7 +203,7 @@ def process_row(row, output_dir, api_key, api_key_verif, model_type, mode=0):
             f"Reasoning trace: {components_dict['reasoning_trace']}\n"
         )
         try:
-            response_verif, token_data_verif = call_llm("o4-mini", api_key_verif, prompt.REASONING_VERIFIER_PROMPT, verif_prompt)
+            response_verif, token_data_verif = call_llm(model_verif_type, api_key_verif, prompt.REASONING_VERIFIER_PROMPT, verif_prompt)
         except Exception as e:
             logger.error(f"Verifier call failed for row {index}: {e}")
         print("Verifier Response:\n", response_verif)
@@ -213,9 +213,13 @@ def process_row(row, output_dir, api_key, api_key_verif, model_type, mode=0):
             updated_row = {**updated_row, **fixed_dict}
             print("Updated row with verification components for row", index)
             # Verifier is hard fixed to openai
-            local_tokens["input_tokens_api_verif"] = token_data_verif.get("prompt_tokens", 0)
-            local_tokens["output_tokens_api_verif"] = token_data_verif.get("completion_tokens", 0)
-            local_tokens["total_tokens_api_verif"] = token_data_verif.get("total_tokens", 0)
+            token_in, token_out, token_total = token_counter(model_type, token_data_reph)
+            # local_tokens["input_tokens_api_verif"] = token_data_verif.get("prompt_tokens", 0)
+            # local_tokens["output_tokens_api_verif"] = token_data_verif.get("completion_tokens", 0)
+            # local_tokens["total_tokens_api_verif"] = token_data_verif.get("total_tokens", 0)
+            local_tokens["input_tokens_api_verif"] = token_in
+            local_tokens["output_tokens_api_verif"] = token_out
+            local_tokens["total_tokens_api_verif"] = token_total
 
             # If reasoning and solution are different, rerun with solution hints.
             comparison_result = None
@@ -259,7 +263,7 @@ def process_row(row, output_dir, api_key, api_key_verif, model_type, mode=0):
     
     return updated_row, local_tokens
 
-def process_api_reasoning_parallel(dataset, api_keys, api_keys_verif, model_type, output_dir, mode=0):
+def process_api_reasoning_parallel(dataset, api_keys, api_keys_verif, model_type, model_verif_type, output_dir, mode=0):
     """
     Process the dataset in parallel, calling LLM APIs for reasoning and verification.
     Returns the updated dataset and aggregated token usage.
@@ -288,7 +292,7 @@ def process_api_reasoning_parallel(dataset, api_keys, api_keys_verif, model_type
     rows = dataset.to_dict('records')
 
     if model_type == "gemini":
-        num_workers = 50 # Tier1 rate. RPM 2,000, TPM 4M.  
+        num_workers = 20 # Tier1 rate. RPM 2,000, TPM 4M.  
     else: 
         num_workers = 10
         # num_workers = len(api_keys)  # Use the number of API keys as the max workers
@@ -326,7 +330,7 @@ def process_api_reasoning_parallel(dataset, api_keys, api_keys_verif, model_type
                 key_verif = None
             else:
                 key_verif = api_keys_verif[i % len(api_keys_verif)]
-            futures.append(executor.submit(process_row, row, temp_dir, key, key_verif, model_type, mode))
+            futures.append(executor.submit(process_row, row, temp_dir, key, key_verif, model_type, model_verif_type, mode))
         
         # Collect results and aggregate token counts
         for future in futures:
@@ -354,7 +358,7 @@ def process_api_reasoning_parallel(dataset, api_keys, api_keys_verif, model_type
     
     return updated_dataset, aggregated_tokens
 
-def process_api_reasoning(dataset, model_type, output_dir, mode=0):
+def process_api_reasoning(dataset, model_type, model_verif_type, output_dir, mode=0):
     """
     Iterates over the combined dataset, generates reasoning via an LLM call,
     extracts components from the response, and if available, verifies the reasoning.
@@ -447,7 +451,7 @@ def process_api_reasoning(dataset, model_type, output_dir, mode=0):
                     f"Reasoning trace: {components_dict['reasoning_trace']}\n"
                 )
 
-                response_verif, token_data_verif = call_llm("o4-mini", api_key_verif, prompt.REASONING_VERIFIER_PROMPT, verif_prompt)
+                response_verif, token_data_verif = call_llm(model_verif_type, api_key_verif, prompt.REASONING_VERIFIER_PROMPT, verif_prompt)
                 print("Verifier Response:\n", response_verif)
                 fixed_components = extract_verification_components(response_verif)
                 print("Extracted Verification Components:", fixed_components)
@@ -459,7 +463,7 @@ def process_api_reasoning(dataset, model_type, output_dir, mode=0):
                                       with_indices=True)
                 print("Updated dataset with verification components for row", index)
 
-                input_token_count, output_token_count, total_token_count = determine_token_counts("o4-mini", token_data_verif)
+                input_token_count, output_token_count, total_token_count = determine_token_counts(model_type, token_data_verif)
                 aggregated_tokens["input_tokens_api_verif"] += input_token_count
                 aggregated_tokens["output_tokens_api_verif"] += output_token_count
                 aggregated_tokens["total_tokens_api_verif"] += total_token_count
@@ -503,7 +507,7 @@ def process_api_reasoning(dataset, model_type, output_dir, mode=0):
     print("process_api_reasoning  {idx} complete. Results saved to disk.", dataset)
     return dataset, aggregated_tokens
 
-def print_token_summary(tokens, model_type="anthropic"):
+def print_token_summary(tokens, model_type, verifier_model=None):
     """
     Print the token summary for API calls.
     For inference cost, it uses the appropriate label based on the model_type.
@@ -521,7 +525,7 @@ def print_token_summary(tokens, model_type="anthropic"):
     elif model_type.lower() == "qwq":
         cost_label = "qwq-32b-preview"
     else:
-        cost_label = "claude-3.7-sonnet"
+        cost_label = model_type.lower()
     
     print("Inference cost:", estimate_cost.api_cost_estimation_service(
         tokens["input_tokens_api"], tokens["output_tokens_api"], cost_label))
@@ -529,8 +533,22 @@ def print_token_summary(tokens, model_type="anthropic"):
     print("\nTotal input tokens verif:", tokens["input_tokens_api_verif"])
     print("Total output tokens verif:", tokens["output_tokens_api_verif"])
     print("Total tokens verif:", tokens["total_tokens_api_verif"])
+    
+    # Choose cost label based on verifier_model
+    if verifier_model.lower() == "gemini":
+        verif_cost_label = "gemini-2.0-flash"
+    elif verifier_model.lower() == "anthropic":
+        verif_cost_label = "claude-3.7-sonnet"
+    elif verifier_model.lower() == "qwq":
+        verif_cost_label = "qwq-32b-preview"
+    else:
+        verif_cost_label = verifier_model.lower()
+
+    if verifier_model == None:
+        verif_cost_label = cost_label
+    
     print("Verification cost:", estimate_cost.api_cost_estimation_service(
-        tokens["input_tokens_api_verif"], tokens["output_tokens_api_verif"], "o4-mini"))
+        tokens["input_tokens_api_verif"], tokens["output_tokens_api_verif"], verif_cost_label))
     
     print("\nTotal input tokens reph:", tokens["input_tokens_api_reph"])
     print("Total output tokens reph:", tokens["output_tokens_api_reph"])
